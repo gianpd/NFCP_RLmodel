@@ -3,6 +3,8 @@ import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
 
+from sklearn.model_selection import train_test_split
+
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, BatchNormalization
@@ -12,7 +14,31 @@ from keras import backend as K
 
 import tensorflow as tf
 
-EPISODES = 3
+EPISODES = 10
+TIME = 100
+
+BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
+WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
+
+
+class Measurement():
+
+    def __init__(self, state_size, action_size, train_size, test_size):
+
+        self._stateSize = state_size
+        self._actionSize = action_size
+        self._trainSize = train_size
+        self._testSize = test_size
+        self.measures = {'loss': [], 'accuracy': [], 'totalRewards': []}
+
+    def train_test_split(self, dataset):
+
+        train = dataset[0:int(dataset.shape[0]*self._trainSize)]
+        test = dataset[int(dataset.shape[0]*self._trainSize):-1]
+        return train, test
+
+
+
 
 class DQNAgent:
     """Neural Fairness Consensus Protocol Deep-Q-Network model:
@@ -38,6 +64,7 @@ class DQNAgent:
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
+        self.data = Measurement(state_size, action_size, train_size=0.8, test_size=0.2)
 
 
 
@@ -88,9 +115,7 @@ class DQNAgent:
         """"replay buffer technique"""
 
         minibatch = random.sample(self.memory, batch_size)
-        k = 0
         for state, action, reward, next_state, done in minibatch:
-            k += 1
             target = self.model.predict(state)
             if done:
                 target[0][action] = reward
@@ -99,14 +124,7 @@ class DQNAgent:
                 t = self.target_model.predict(next_state)[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             history = self.model.fit(state, target, epochs=1, verbose=0)
-            if k % 300 == 0:
-                loss = history.history['loss']
-                epochs = range(1, len(loss) + 1)
-                plt.plot(epochs, loss)
-                plt.title('Training loss')
-                plt.savefig(f'plots/loss_{k}.png')
-                plt.close()
-
+            self.data.measures['loss'].append(history.history['loss'])
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -118,37 +136,51 @@ class DQNAgent:
         self.model.save_weights(name)
 
     def step(self, action, state):
-        reward = self.reward(state, action)
-        return reward
+        reward, dist = self.reward(state, action)
+        return reward, dist
 
     def reward(self, state, action):
 
-        if state[0, 4] == 0:
-            if action >= 3:
-                self.total_rewards += 1
-                return 1
-            else:
-                return 0
+        if state[0, 4] == 0:  # bad node
+            dist = np.linalg.norm(WORSTE - state)
+            if dist > 5:  # not too bad
+                if action == 3:
+                    self.total_rewards += 1
+                    return 1, dist
+                else:
+                    return 0, dist
+            else:  # very bad
+                if action == 4:
+                    self.total_rewards += 1
+                    return 1, dist
+                else:
+                    return 0, dist
 
-        if state[0, 4] == 1:
-            if action < 3:
-                return 1
-            else:
-                return 0
+        if state[0, 4] == 1:  # good node
+            dist = np.linalg.norm(BEST - state)
+            if dist > 5:  # not too good
+                if action >= 1 and action < 3:
+                    self.total_rewards += 1
+                    return 1, dist
+                else:
+                    return 0, dist
+            else:  # very good
+                if action == 1:
+                    self.total_rewards += 1
+                    return 1, dist
+                else:
+                    return 0, dist
 
 def fakeDataset(Nsamples=1000):
     """Simulate a dataset containing states about nodes:
     Features = [UpTime, BalanceInTime, OutLinkMatrix, Ping, Behaviour]"""
 
-    best = [1000, 10000, 500, 12, 1]
-    worste = [0, 0, 1, 50, 0]
-
     dataset = np.zeros((Nsamples, 5))
     for i in range(Nsamples):
-        b = best + np.random.randn(5)*np.random.randint(1, 5)
-        b[4] = 1
-        w = worste + np.random.randn(5)*np.random.randint(1, 5)
-        w[4] = 0
+        b = BEST + np.random.randn(5)*np.random.randint(1, 5)
+        b[0, 4] = 1
+        w = WORSTE + np.random.randn(5)*np.random.randint(1, 5)
+        w[0, 4] = 0
         dataset[i, :] = b if np.random.choice([0,1]) == 0 else w
 
     return dataset
@@ -161,25 +193,26 @@ def fakeDataset(Nsamples=1000):
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
-
     dataset = fakeDataset()
     state_size = dataset.shape[1]
     action_size = len(actions)
 
     agent = DQNAgent(state_size, action_size)
+    train, test = agent.data.train_test_split(dataset)
     done = False
-    batch_size = 32
+    batch_size = 64
 
     for e in range(EPISODES):
-        state = dataset[0]
+        state = train[0]
         state = np.reshape(state, [1, 5])
-        for time in range(500):
+        for time in range(TIME):
+            print(f'*** TIME: {time} ***')
             action = agent.act(state)
             print(f"Given behaviour: {state[0, 4]}, chosen action: {action}")
-            reward = agent.step(action, state)
-            print(f"Get reward: {reward}")
-            done = 1 if time+1 == int(dataset.shape[0]*0.5) else 0
-            next_state = np.reshape(dataset[time+1], [1, 5])
+            reward, dist = agent.step(action, state)
+            print(f"Get reward: {reward}, given dist: {dist}")
+            done = True if time+1 == int(train.shape[0]) else False
+            next_state = np.reshape(train[time+1], [1, 5])
             agent.memorize(state, action, reward, next_state, done)
             state = next_state
             if done:
@@ -189,3 +222,15 @@ if __name__ == "__main__":
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
+
+        agent.data.measures['totalRewards'].append(agent.total_rewards/TIME)
+
+    epochs_loss = range(agent.data.measures['loss'] + 1)
+    epochs_rewards = range(agent.data.measures['totalRewards'] + 1)
+    plt.plot(epochs_loss, agent.data.measures['loss'], label='loss')
+    plt.plot(epochs_rewards, agent.data.measures['totalRewards'], label='%TotRewards')
+    plt.legend()
+    plt.grid()
+    plt.title('Metrics')
+    plt.savefig('plots/TrainMetrics.png')
+    plt.close()
