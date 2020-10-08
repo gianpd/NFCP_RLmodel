@@ -187,7 +187,7 @@ class DQNAgent:
         plt.grid()
         plt.title(f'Episod: {episod}')
         plt.ylabel('%TotalRewards')
-        plt.xlabel('epochs')
+        plt.xlabel('time')
         plt.savefig(f'plots/TotRewards_{episod}.png')
         plt.close()
 
