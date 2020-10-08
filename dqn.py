@@ -14,7 +14,7 @@ from keras import backend as K
 
 import tensorflow as tf
 
-EPISODES = 10
+EPISODES = 5
 TIME = 100
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
@@ -171,6 +171,28 @@ class DQNAgent:
                 else:
                     return 0, dist
 
+    def plotLoss(self, episod=0):
+
+        epochs_loss = range(len(self.data.measures['loss']))
+        plt.plot(epochs_loss, self.data.measures['loss'])
+        plt.grid()
+        plt.title('Loss')
+        plt.xlabel('epochs')
+        plt.savefig(f'plots/Loss_{episod}.png')
+        plt.close()
+
+    def plotRewards(self, episod=0):
+        epochs_rewards = range(len(self.data.measures['totalRewards']))
+        plt.plot(epochs_rewards, self.data.measures['totalRewards'])
+        plt.grid()
+        plt.title(f'Episod: {episod}')
+        plt.ylabel('%TotalRewards')
+        plt.xlabel('epochs')
+        plt.savefig(f'plots/TotRewards_{episod}.png')
+        plt.close()
+
+
+
 def fakeDataset(Nsamples=1000):
     """Simulate a dataset containing states about nodes:
     Features = [UpTime, BalanceInTime, OutLinkMatrix, Ping, Behaviour]"""
@@ -190,6 +212,9 @@ def fakeDataset(Nsamples=1000):
 
 
 
+
+
+
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
@@ -203,7 +228,8 @@ if __name__ == "__main__":
     batch_size = 64
 
     for e in range(EPISODES):
-        state = train[0]
+        states = train[TIME*e:(TIME)*(1+e)+1]
+        state = states[0]
         state = np.reshape(state, [1, 5])
         for time in range(TIME):
             print(f'*** TIME: {time} ***')
@@ -212,7 +238,7 @@ if __name__ == "__main__":
             reward, dist = agent.step(action, state)
             print(f"Get reward: {reward}, given dist: {dist}")
             done = True if time+1 == int(train.shape[0]) else False
-            next_state = np.reshape(train[time+1], [1, 5])
+            next_state = np.reshape(states[time+1], [1, 5])
             agent.memorize(state, action, reward, next_state, done)
             state = next_state
             if done:
@@ -222,15 +248,8 @@ if __name__ == "__main__":
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
+            agent.data.measures['totalRewards'].append(agent.total_rewards / TIME)
 
-        agent.data.measures['totalRewards'].append(agent.total_rewards/TIME)
-
-    epochs_loss = range(agent.data.measures['loss'] + 1)
-    epochs_rewards = range(agent.data.measures['totalRewards'] + 1)
-    plt.plot(epochs_loss, agent.data.measures['loss'], label='loss')
-    plt.plot(epochs_rewards, agent.data.measures['totalRewards'], label='%TotRewards')
-    plt.legend()
-    plt.grid()
-    plt.title('Metrics')
-    plt.savefig('plots/TrainMetrics.png')
-    plt.close()
+        #agent.data.measures['totalRewards'].append(agent.total_rewards/TIME)
+        #agent.plotLoss(episod=e)
+        agent.plotRewards(episod=e)
