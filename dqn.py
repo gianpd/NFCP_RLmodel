@@ -14,8 +14,8 @@ from keras import backend as K
 
 import tensorflow as tf
 
-EPISODES = 5
-TIME = 500
+EPISODES = 6
+TIME = 15000
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
@@ -62,15 +62,15 @@ class DQNAgent:
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
         self.gamma = 0.95  # discount rate
-        self.epsilon = 0.7  # exploration rate
-        self.epsilon_min = 0.01
+        self.epsilon = 1  # exploration rate
+        self.epsilon_min = 0.0001
         self.epsilon_decay = 0.89
         self.learning_rate = 0.001
         self.model = self._build_model()
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
-        self.data = Measurement(state_size, action_size, train_size=0.5, test_size=0.2)
+        self.data = Measurement(state_size, action_size, train_size=0.8, test_size=0.2)
 
 
 
@@ -97,9 +97,8 @@ class DQNAgent:
         model.add(BatchNormalization())
         model.add(Dense(24, activation='relu'))
         model.add(BatchNormalization())
-        #model.add(Dropout(rate=0.3))
         model.add(Dense(10, activation='relu'))
-        model.add(BatchNormalization())
+        model.add(Dropout(rate=0.3))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
@@ -116,7 +115,7 @@ class DQNAgent:
 
     def act(self, state):
         """epsilon-greedy method"""
-        if np.random.rand() <= self.epsilon:
+        if self.epsilon > np.random.rand(1)[0]:
             print("random choice")
             return random.randrange(self.action_size)
         print("predicted choice")
@@ -124,28 +123,35 @@ class DQNAgent:
         return np.argmax(act_values[0])  # returns index action
 
     def replay(self, batch_size):
-        """"replay buffer technique: when a minibatch is available in the buffer """
+        """"replay buffer technique: when a minibatch is available in the buffer the model is trained """
 
         minibatch = random.sample(self.memory, batch_size)
+        print("Replay buffer memory: ")
+        loss = []
         for state, action, reward, next_state, done in minibatch:
             target = self.model.predict(state)
-            print(f"first state's behavior: {state[:, 4]}")
-            print(f"predicted target: {target}, action: {action}, reward: {reward}")
+            #print(f"first state's behavior: {state[:, 4]}")
+            #print(f"predicted target: {target}, action: {action}, reward: {reward}")
             #print(f"sum_target: {np.sum(target)}")
             if done:
                 target[0][action] = reward
             else:
                 # a = self.model.predict(next_state)[0]
                 future_target = self.target_model.predict(next_state)[0]  # predict future Q-learning value
-                print(f"max futureTarget: {np.amax(future_target)}")
+                #print(f"max futureTarget: {np.amax(future_target)}")
                 target[0][action] = reward + self.gamma * np.amax(future_target)
-                print(f"target[action]: {target[0][action]}")
+                #print(f"target[action]: {target[0][action]}")
                 #print(f"state: {state}, target: {target}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
-            self.data.measures['loss'].append(history.history['loss'])
+            loss.append(history.history['loss'])
+        self.data.measures['loss'].append(np.linalg.norm(loss))
+        print(f"Loss: {np.linalg.norm(self.data.measures['loss'])}")
 
-        if self.epsilon > self.epsilon_min:
+        if self.epsilon >= self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+
+        self.epsilon = max(self.epsilon, self.epsilon_min)
+        print(f"Epsilon: {self.epsilon}")
 
     def load(self, name):
         self.model.load_weights(name)
@@ -197,18 +203,18 @@ class DQNAgent:
         plt.grid()
         plt.title('Loss')
         plt.xlabel('epochs')
-        plt.savefig(f'plots/Loss_{episod}.png')
+        plt.savefig(f'plots/Loss_{episod+len(self.data.measures["loss"])}.png')
         plt.close()
 
     def plotRewards(self, episod=0):
         plt.close('all')
-        epochs_rewards = range(len(self.data.measures['totalRewards']))
-        plt.plot(epochs_rewards, self.data.measures['totalRewards'])
+        epochs_rewards = range(len(self.data.measures['totalRewards'][episod]))
+        plt.plot(epochs_rewards, self.data.measures['totalRewards'][episod])
         plt.grid()
-        plt.title(f'Episod: {episod}')
+        plt.title(f'Episod: {episod+1}')
         plt.ylabel('Total Rewards')
         plt.xlabel('training epochs')
-        plt.savefig(f'plots/TotRewards_{episod}.png')
+        plt.savefig(f'plots/TotRewards_{episod+1}.png')
         plt.close()
 
 
@@ -229,7 +235,7 @@ def fakeDataset(Nsamples=1000):
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
-    dataset = fakeDataset(Nsamples=500)
+    dataset = fakeDataset(Nsamples=15000)
     state_size = dataset.shape[1]
     action_size = len(actions)
 
@@ -243,9 +249,9 @@ if __name__ == "__main__":
         state = train[0]
         state = np.reshape(state, [1, 5])
         agent.total_rewards = 0
-        agent.data.measures['loss'].clear()
+        agent.epsilon = 1
         for time in range(TIME):
-            print(f'*** TIME: {time} ***')
+            print(f'*** TIME: {time} *** total rewards: {agent.total_rewards}')
             action = agent.act(state)  #index of maximum the maximum Q-learning value
             print(f"Given behaviour: {state[0, 4]}, chosen action: {action}")
             reward, dist = agent.step(action, state)
@@ -257,11 +263,14 @@ if __name__ == "__main__":
                 state = next_state
             else:
                 agent.update_target_model()
-                print("episode: {}/{}, score: {}, e: {:.2}"
-                      .format(e, EPISODES, time, agent.epsilon))
+                print("episode: {}/{}, score: {}, epsilon: {:.2}"
+                      .format(e, EPISODES, (agent.total_rewards/time)*100, agent.epsilon))
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
+                if len(agent.data.measures['loss']) % 150 == 0:
+                    agent.plotLoss(episod=e)
+                    #agent.data.measures['loss'].clear()
             agent.data.measures['totalRewards'].append(agent.total_rewards)
 
         agent.plotRewards(episod=e)
