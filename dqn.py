@@ -3,7 +3,7 @@ import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 from keras.models import Sequential
@@ -93,12 +93,14 @@ class DQNAgent:
         The Q-learning function is a non linear function of type: Q:S x A -> R."""
 
         model = Sequential()
+
         model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         model.add(BatchNormalization())
+        #model.add(Dropout(rate=0.2))
         model.add(Dense(24, activation='relu'))
         model.add(BatchNormalization())
+        #model.add(Dropout(rate=0.2))
         model.add(Dense(10, activation='relu'))
-        #model.add(Dropout(rate=0.3))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
@@ -145,7 +147,7 @@ class DQNAgent:
             history = self.model.fit(state, target, epochs=1, verbose=0)
             loss.append(history.history['loss'])
         self.data.measures['loss'].append(np.linalg.norm(loss))
-        print(f"Loss: {np.linalg.norm(self.data.measures['loss'])}")
+        print(f"Loss: {self.data.measures['loss'][-1]}")
 
         if self.epsilon >= self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -202,7 +204,7 @@ class DQNAgent:
         plt.plot(epochs_loss, self.data.measures['loss'])
         plt.grid()
         plt.title('Loss')
-        plt.xlabel('epochs')
+        plt.xlabel('training epochs')
         plt.savefig(f'plots/Loss_{episod+len(self.data.measures["loss"])}.png')
         plt.close()
 
@@ -241,6 +243,9 @@ if __name__ == "__main__":
 
     agent = DQNAgent(state_size, action_size)
     train, test = agent.data.train_test_split(dataset)
+
+    scalar = StandardScaler()
+    train = scalar.fit_transform(train)
     print(f"train shape: {train.shape}")
     done = False
     batch_size = 32
