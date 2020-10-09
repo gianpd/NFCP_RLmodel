@@ -98,7 +98,7 @@ class DQNAgent:
         model.add(Dense(24, activation='relu'))
         model.add(BatchNormalization())
         model.add(Dense(10, activation='relu'))
-        model.add(Dropout(rate=0.3))
+        #model.add(Dropout(rate=0.3))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
