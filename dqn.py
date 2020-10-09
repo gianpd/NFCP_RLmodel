@@ -13,7 +13,7 @@ from keras import backend as K
 import tensorflow as tf
 
 EPISODES = 6
-TIME = 150000
+TIME = 1500
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
@@ -59,7 +59,7 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
-        self.gamma = 0.95  # discount rate
+        self.gamma = 0.7  # discount rate
         self.epsilon = 1  # exploration rate
         self.epsilon_min = 0.0001
         self.epsilon_decay = 0.89
@@ -93,7 +93,10 @@ class DQNAgent:
         model = Sequential()
         model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         #model.add(BatchNormalization())
+        model.add(Dropout(rate=0.3))
         model.add(Dense(24, activation='relu'))
+        #model.add(Dropout(rate=0.3))
+        model.add(Dense(14, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
@@ -141,8 +144,10 @@ class DQNAgent:
             #print(len(history.history['loss']))
             loss.append(history.history['loss'])
         self.data.measures['loss'].append(np.mean(loss))
+        print(f"Loss: {self.data.measures['loss'][-1]}")
         nMiniBatches = len(self.data.measures['loss'])
-        if nMiniBatches % batch_size*5 == 0:
+        if nMiniBatches > batch_size*8 and ((nMiniBatches % batch_size) == 0):
+            print(f"Print Loss miniBatch {nMiniBatches}")
             self.plotLoss(episod=nMiniBatches)
 
         if self.epsilon >= self.epsilon_min:
@@ -167,7 +172,7 @@ class DQNAgent:
         if state[0, 4] == 0:  # bad node
             dist = np.linalg.norm(WORSTE - state)
             if dist > 5:  # not too bad
-                if action == 3:
+                if action >= 3:
                     self.total_rewards += 1
                     return 1, dist
                 else:
@@ -188,7 +193,7 @@ class DQNAgent:
                 else:
                     return 0, dist
             else:  # very good
-                if action == 1:
+                if action == 0:
                     self.total_rewards += 1
                     return 1, dist
                 else:
@@ -196,18 +201,20 @@ class DQNAgent:
 
     def plotLoss(self, episod=0):
 
-        epochs_loss = range(len(self.data.measures['loss']))
+        batch = len(self.data.measures["loss"])
+        plt.close('all')
+        epochs_loss = range(batch)
         plt.plot(epochs_loss, self.data.measures['loss'])
         plt.grid()
         plt.title('Loss')
         plt.xlabel('training epochs')
-        plt.savefig(f'plots/Loss_{episod+len(self.data.measures["loss"])}.png')
+        plt.savefig(f'plots/Loss_{batch}.png')
         plt.close()
 
     def plotRewards(self, episod=0):
         plt.close('all')
-        epochs_rewards = range(len(self.data.measures['totalRewards'][episod]))
-        plt.plot(epochs_rewards, self.data.measures['totalRewards'][episod])
+        epochs_rewards = range(len(self.data.measures['totalRewards']))
+        plt.plot(epochs_rewards, self.data.measures['totalRewards'])
         plt.grid()
         plt.title(f'Episod: {episod+1}')
         plt.ylabel('Total Rewards')
@@ -222,7 +229,7 @@ def fakeDataset(Nsamples=1000):
 
     dataset = np.zeros((Nsamples, 5))
     for i in range(Nsamples):
-        b = BEST + np.random.randn(5)*np.random.randint(1, 5)
+        b = BEST - np.random.randn(5)*np.random.randint(1, 5)
         b[0, 4] = 1
         w = WORSTE + np.random.randn(5)*np.random.randint(1, 5)
         w[0, 4] = 0
@@ -233,7 +240,7 @@ def fakeDataset(Nsamples=1000):
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
-    dataset = fakeDataset(Nsamples=50000)
+    dataset = fakeDataset(Nsamples=TIME)
     state_size = dataset.shape[1]
     action_size = len(actions)
 
@@ -269,7 +276,7 @@ if __name__ == "__main__":
                 agent.replay(batch_size)
             agent.data.measures['totalRewards'].append(agent.total_rewards)
 
-            if len(agent.data.measures['loss']) > 0 and agent.data.measures['loss'][-1] <= 0.02:
+            if len(agent.data.measures['loss']) > 0 and agent.data.measures['loss'][-1] <= 10:
                 print(f"Minimum Loss: {agent.data.measures['loss']}")
                 break
 
