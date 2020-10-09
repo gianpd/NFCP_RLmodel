@@ -3,8 +3,6 @@ import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
 
-from sklearn.preprocessing import StandardScaler
-
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, BatchNormalization
@@ -244,8 +242,6 @@ if __name__ == "__main__":
     agent = DQNAgent(state_size, action_size)
     train, test = agent.data.train_test_split(dataset)
 
-    scalar = StandardScaler()
-    train = scalar.fit_transform(train)
     print(f"train shape: {train.shape}")
     done = False
     batch_size = 32
