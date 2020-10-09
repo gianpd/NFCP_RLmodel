@@ -13,7 +13,7 @@ from keras import backend as K
 import tensorflow as tf
 
 EPISODES = 6
-TIME = 15000
+TIME = 150000
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
@@ -63,7 +63,7 @@ class DQNAgent:
         self.epsilon = 1  # exploration rate
         self.epsilon_min = 0.0001
         self.epsilon_decay = 0.89
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.model = self._build_model()
         self.target_model = self._build_model()
         self.update_target_model()
@@ -91,14 +91,9 @@ class DQNAgent:
         The Q-learning function is a non linear function of type: Q:S x A -> R."""
 
         model = Sequential()
-
         model.add(Dense(14, input_dim=self.state_size, activation='relu'))
-        model.add(BatchNormalization())
-        #model.add(Dropout(rate=0.2))
+        #model.add(BatchNormalization())
         model.add(Dense(24, activation='relu'))
-        model.add(BatchNormalization())
-        #model.add(Dropout(rate=0.2))
-        model.add(Dense(10, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
@@ -143,9 +138,12 @@ class DQNAgent:
                 #print(f"target[action]: {target[0][action]}")
                 #print(f"state: {state}, target: {target}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
+            #print(len(history.history['loss']))
             loss.append(history.history['loss'])
-        self.data.measures['loss'].append(np.linalg.norm(loss))
-        print(f"Loss: {self.data.measures['loss'][-1]}")
+        self.data.measures['loss'].append(np.mean(loss))
+        nMiniBatches = len(self.data.measures['loss'])
+        if nMiniBatches % batch_size*5 == 0:
+            self.plotLoss(episod=nMiniBatches)
 
         if self.epsilon >= self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -235,7 +233,7 @@ def fakeDataset(Nsamples=1000):
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
-    dataset = fakeDataset(Nsamples=15000)
+    dataset = fakeDataset(Nsamples=50000)
     state_size = dataset.shape[1]
     action_size = len(actions)
 
@@ -269,9 +267,10 @@ if __name__ == "__main__":
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
-                if len(agent.data.measures['loss']) % 150 == 0:
-                    agent.plotLoss(episod=e)
-                    #agent.data.measures['loss'].clear()
             agent.data.measures['totalRewards'].append(agent.total_rewards)
+
+            if len(agent.data.measures['loss']) > 0 and agent.data.measures['loss'][-1] <= 0.02:
+                print(f"Minimum Loss: {agent.data.measures['loss']}")
+                break
 
         agent.plotRewards(episod=e)
