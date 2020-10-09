@@ -15,11 +15,12 @@ from keras import backend as K
 import tensorflow as tf
 
 EPISODES = 5
-TIME = 100
+TIME = 500
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
 
+plt.close('all')
 
 class Measurement():
 
@@ -38,8 +39,6 @@ class Measurement():
         return train, test
 
 
-
-
 class DQNAgent:
     """Neural Fairness Consensus Protocol Deep-Q-Network model:
     nodes (agents) have to select an action for each state. States are samples reporting some features about
@@ -49,7 +48,14 @@ class DQNAgent:
     2) participate with 75% tickets: 1;
     3) participate with 50% tickets: 2;
     4) participate with 25% tickets: 3;
-    5) participate with 0% tickets: 4"""
+    5) participate with 0% tickets: 4
+
+    ref. Mnih, Volodymyr, et al. "Playing atari with deep reinforcement learning." arXiv preprint arXiv:1312.5602 (2013).
+
+    A DNN is used for approximating the Q-learning function. Two models are built: The first one for predicting the
+    Q-learning at the current time (given the current action), the second one (target_model) for predicting the future
+    Q-learning value (given the future state and action), in according to: Q(s,a) = r + gamma*Q'(s', a').
+    """
 
     def __init__(self, state_size, action_size):
         self.state_size = state_size
@@ -64,12 +70,12 @@ class DQNAgent:
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
-        self.data = Measurement(state_size, action_size, train_size=0.8, test_size=0.2)
+        self.data = Measurement(state_size, action_size, train_size=0.5, test_size=0.2)
 
 
 
     def _huber_loss(self, y_true, y_pred, clip_delta=1.0):
-        """Huber loss for Q Learning
+        """Huber loss for Q Learning: it acts as a square loss for small errors and as a mean absolute loss for big errors
 
            References: https://en.wikipedia.org/wiki/Huber_loss
                        https://www.tensorflow.org/api_docs/python/tf/losses/huber_loss
@@ -84,17 +90,20 @@ class DQNAgent:
 
     def _build_model(self):
         """Neural Network model for learning the Q(s,a) function. The model will learn how to take action given a state.
-        The model's inputs are states, while the outputs are actions. In particular the outputs are 5 softmax function
-        outputs. The selected action will be the action with the biggest associated probability."""
+        The Q-learning function is a non linear function of type: Q:S x A -> R."""
+
         model = Sequential()
         model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         model.add(BatchNormalization())
         model.add(Dense(24, activation='relu'))
         model.add(BatchNormalization())
-        model.add(Dropout(rate=0.3))
-        model.add(Dense(self.action_size, activation='softmax'))
+        #model.add(Dropout(rate=0.3))
+        model.add(Dense(10, activation='relu'))
+        model.add(BatchNormalization())
+        model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
+        print(model.summary())
         return model
 
     def update_target_model(self):
@@ -102,27 +111,36 @@ class DQNAgent:
         self.target_model.set_weights(self.model.get_weights())
 
     def memorize(self, state, action, reward, next_state, done):
+        """Buffer memory"""
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
         """epsilon-greedy method"""
         if np.random.rand() <= self.epsilon:
+            print("random choice")
             return random.randrange(self.action_size)
+        print("predicted choice")
         act_values = self.model.predict(state)
-        return np.argmax(act_values[0])  # returns action
+        return np.argmax(act_values[0])  # returns index action
 
     def replay(self, batch_size):
-        """"replay buffer technique"""
+        """"replay buffer technique: when a minibatch is available in the buffer """
 
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
             target = self.model.predict(state)
+            print(f"first state's behavior: {state[:, 4]}")
+            print(f"predicted target: {target}, action: {action}, reward: {reward}")
+            #print(f"sum_target: {np.sum(target)}")
             if done:
                 target[0][action] = reward
             else:
                 # a = self.model.predict(next_state)[0]
-                t = self.target_model.predict(next_state)[0]
-                target[0][action] = reward + self.gamma * np.amax(t)
+                future_target = self.target_model.predict(next_state)[0]  # predict future Q-learning value
+                print(f"max futureTarget: {np.amax(future_target)}")
+                target[0][action] = reward + self.gamma * np.amax(future_target)
+                print(f"target[action]: {target[0][action]}")
+                #print(f"state: {state}, target: {target}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
             self.data.measures['loss'].append(history.history['loss'])
 
@@ -140,6 +158,7 @@ class DQNAgent:
         return reward, dist
 
     def reward(self, state, action):
+
 
         if state[0, 4] == 0:  # bad node
             dist = np.linalg.norm(WORSTE - state)
@@ -182,15 +201,15 @@ class DQNAgent:
         plt.close()
 
     def plotRewards(self, episod=0):
+        plt.close('all')
         epochs_rewards = range(len(self.data.measures['totalRewards']))
         plt.plot(epochs_rewards, self.data.measures['totalRewards'])
         plt.grid()
         plt.title(f'Episod: {episod}')
-        plt.ylabel('%TotalRewards')
-        plt.xlabel('time')
+        plt.ylabel('Total Rewards')
+        plt.xlabel('training epochs')
         plt.savefig(f'plots/TotRewards_{episod}.png')
         plt.close()
-
 
 
 def fakeDataset(Nsamples=1000):
@@ -207,49 +226,42 @@ def fakeDataset(Nsamples=1000):
 
     return dataset
 
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
-    dataset = fakeDataset()
+    dataset = fakeDataset(Nsamples=500)
     state_size = dataset.shape[1]
     action_size = len(actions)
 
     agent = DQNAgent(state_size, action_size)
     train, test = agent.data.train_test_split(dataset)
+    print(f"train shape: {train.shape}")
     done = False
-    batch_size = 64
+    batch_size = 32
 
     for e in range(EPISODES):
-        states = train[TIME*e:(TIME)*(1+e)+1]
-        state = states[0]
+        state = train[0]
         state = np.reshape(state, [1, 5])
+        agent.total_rewards = 0
+        agent.data.measures['loss'].clear()
         for time in range(TIME):
             print(f'*** TIME: {time} ***')
-            action = agent.act(state)
+            action = agent.act(state)  #index of maximum the maximum Q-learning value
             print(f"Given behaviour: {state[0, 4]}, chosen action: {action}")
             reward, dist = agent.step(action, state)
             print(f"Get reward: {reward}, given dist: {dist}")
             done = True if time+1 == int(train.shape[0]) else False
-            next_state = np.reshape(states[time+1], [1, 5])
-            agent.memorize(state, action, reward, next_state, done)
-            state = next_state
-            if done:
+            if not done:
+                next_state = np.reshape(train[time+1], [1, 5])
+                agent.memorize(state, action, reward, next_state, done)
+                state = next_state
+            else:
                 agent.update_target_model()
                 print("episode: {}/{}, score: {}, e: {:.2}"
                       .format(e, EPISODES, time, agent.epsilon))
                 break
             if len(agent.memory) > batch_size:
                 agent.replay(batch_size)
-            agent.data.measures['totalRewards'].append(agent.total_rewards / TIME)
+            agent.data.measures['totalRewards'].append(agent.total_rewards)
 
-        #agent.data.measures['totalRewards'].append(agent.total_rewards/TIME)
-        #agent.plotLoss(episod=e)
         agent.plotRewards(episod=e)

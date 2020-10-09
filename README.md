@@ -20,5 +20,8 @@ StateNodeB = [1050, 10, 340, ...]
 StateNodeC = [1000, 28, 100, ...]
 StateNodeD = [1050, 10, 340, ...]
 ```
+A Deep Neural Network is used to approximating the Q-learning function: 
+<a href="https://www.codecogs.com/eqnedit.php?latex=Q:&space;S&space;\times&space;A&space;\rightarrow&space;\mathbb{R}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?Q:&space;S&space;\times&space;A&space;\rightarrow&space;\mathbb{R}" title="Q: S \times A \rightarrow \mathbb{R}" /></a>
+
 
 
