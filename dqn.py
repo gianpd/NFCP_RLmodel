@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import random
 import numpy as np
 from collections import deque
@@ -59,9 +61,9 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
-        self.gamma = 0.7  # discount rate
+        self.gamma = 0.8  # discount rate
         self.epsilon = 1  # exploration rate
-        self.epsilon_min = 0.0001
+        self.epsilon_min = 0.01
         self.epsilon_decay = 0.89
         self.learning_rate = 0.0001
         self.model = self._build_model()
@@ -93,7 +95,7 @@ class DQNAgent:
         model = Sequential()
         model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         #model.add(BatchNormalization())
-        model.add(Dropout(rate=0.3))
+        #model.add(Dropout(rate=0.3))
         model.add(Dense(24, activation='relu'))
         #model.add(Dropout(rate=0.3))
         model.add(Dense(14, activation='relu'))
@@ -172,7 +174,7 @@ class DQNAgent:
         if state[0, 4] == 0:  # bad node
             dist = np.linalg.norm(WORSTE - state)
             if dist > 5:  # not too bad
-                if action >= 3:
+                if action == 3:
                     self.total_rewards += 1
                     return 1, dist
                 else:
@@ -187,7 +189,7 @@ class DQNAgent:
         if state[0, 4] == 1:  # good node
             dist = np.linalg.norm(BEST - state)
             if dist > 5:  # not too good
-                if action >= 1 and action < 3:
+                if 1 <= action < 3:
                     self.total_rewards += 1
                     return 1, dist
                 else:
@@ -200,7 +202,7 @@ class DQNAgent:
                     return 0, dist
 
     def plotLoss(self, episod=0):
-
+        plt.close('all')
         batch = len(self.data.measures["loss"])
         plt.close('all')
         epochs_loss = range(batch)
@@ -208,7 +210,7 @@ class DQNAgent:
         plt.grid()
         plt.title('Loss')
         plt.xlabel('training epochs')
-        plt.savefig(f'plots/Loss_{batch}.png')
+        plt.savefig(f'Loss_{batch}.png')
         plt.close()
 
     def plotRewards(self, episod=0):
@@ -219,7 +221,7 @@ class DQNAgent:
         plt.title(f'Episod: {episod+1}')
         plt.ylabel('Total Rewards')
         plt.xlabel('training epochs')
-        plt.savefig(f'plots/TotRewards_{episod+1}.png')
+        plt.savefig(f'TotRewards_{episod+1}.png')
         plt.close()
 
 
