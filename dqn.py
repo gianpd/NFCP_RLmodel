@@ -13,21 +13,17 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import Adam
 from keras import backend as K
-from keras.utils.vis_utils import plot_model
-
-
-
 
 import tensorflow as tf
 
 print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 
 EPISODES = 10
-TIME = 1000
-TRAINING_THR = 0.02
+TIME = 800
+TRAINING_THR = 0.4
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
-WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
+WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
 
 plt.close('all')
 
@@ -71,19 +67,19 @@ class DQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=2000)
-        self.gamma = 1  # discount rate
+        self.memory = deque(maxlen=3000)
+        self.gamma = 0.99  # discount rate
         self.epsilon = 1  # exploration rate
         self.epsilon_min = 0.001
         self.epsilon_decay = 0.92
         self.learning_rate = 0.0001
+        self.clipDelta = 0
         self.regDense = partial(tf.keras.layers.Dense,
                                 activation="relu",
-                                kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-4, l2=1e-4),
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
-                                activity_regularizer=tf.keras.regularizers.l2(1e-5))
+                                activity_regularizer=tf.keras.regularizers.l2(1e-4))
         self.model = self._build_model()
-        plot_model(self.model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
@@ -97,13 +93,12 @@ class DQNAgent:
            References: https://en.wikipedia.org/wiki/Huber_loss
                        https://www.tensorflow.org/api_docs/python/tf/losses/huber_loss
            """
+        self.clipDelta = clip_delta
         error = y_true - y_pred
         cond = K.abs(error) <= clip_delta
-
         squared_loss = 0.5 * K.square(error)
-        quadratic_loss = 0.5 * K.square(clip_delta) + clip_delta * (K.abs(error) - clip_delta)
-
-        return K.mean(tf.where(cond, squared_loss, quadratic_loss))
+        linear_loss = clip_delta * (K.abs(error) - clip_delta*0.5)
+        return K.mean(tf.where(cond, squared_loss, linear_loss))
 
     def _build_model(self):
         """Neural Network model for learning the Q(s,a) function. The model will learn how to take action given a state.
@@ -117,13 +112,15 @@ class DQNAgent:
                         activity_regularizer=tf.keras.regularizers.l2(1e-5)
                         ))
         model.add(self.regDense(24))
-        model.add(self.regDense(14))
+        model.add(self.regDense(16))
         model.add(self.regDense(self.action_size, activation='linear'))
         #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
-        model.compile(loss=self._huber_loss,
-                      optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss=tf.keras.losses.Huber(
+        delta=1.0, name='huber_loss'),
+        optimizer=Adam(lr=self.learning_rate))
         print(model.summary())
         return model
+
 
     def update_target_model(self):
         # copy weights from model to target_model
@@ -138,6 +135,7 @@ class DQNAgent:
         if self.epsilon > np.random.rand(1)[0]:
             print("random choice")
             return np.random.randint(self.action_size)
+            #return np.random.choice([1,2])
         print("predicted choice")
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])  # returns index action
@@ -169,7 +167,7 @@ class DQNAgent:
         nMiniBatches = len(self.data.measures['loss'][episod])
         if nMiniBatches == TIME*0.8*0.7 - 2:
             print(f"Print Metrics miniBatch {nMiniBatches}")
-            self.plotMetrics(episod=episod, nBathc=nMiniBatches)
+            self.plotMetrics(episod=episod+1, nBathc=nMiniBatches)
 
 
         if self.epsilon > self.epsilon_min:
@@ -198,13 +196,15 @@ class DQNAgent:
                     self.total_rewards += 1
                     return 1, dist
                 else:
-                    return 0, dist
+                    #self.total_rewards -= 1
+                    return -1, dist
             else:  # very bad
                 if action == 4:
                     self.total_rewards += 1
                     return 1, dist
                 else:
-                    return 0, dist
+                    #self.total_rewards -= 1
+                    return -1, dist
 
         if state[0, 4] == 1:  # good node
             dist = np.linalg.norm(BEST - state)
@@ -213,13 +213,15 @@ class DQNAgent:
                     self.total_rewards += 1
                     return 1, dist
                 else:
-                    return 0, dist
+                    #self.total_rewards -= 1
+                    return -1, dist
             else:  # very good
                 if action == 0:
                     self.total_rewards += 1
                     return 1, dist
                 else:
-                    return 0, dist
+                    #self.total_rewards -= 1
+                    return -1, dist
 
     def plotLoss(self, episod=0):
         plt.close('all')
@@ -257,7 +259,7 @@ class DQNAgent:
         plt.title(f' Episode:{episod}; nBatch:{nBathc}; Lrate: {self.learning_rate}; '
                   f'score %: {self.data.measures["score"][episod]}')
         plt.grid()
-        plt.savefig(f"metrics_{episod+1}_{nBathc}.png")
+        plt.savefig(f"metrics_{episod}_{nBathc}.png")
         plt.close()
 
 
@@ -293,30 +295,32 @@ if __name__ == "__main__":
     batch_size = 32
     stopCondition = False
     initStep = 1
+
     for e in range(EPISODES):
         state = train[0]
-        state = np.reshape(state, [1, 5])
+        state = np.reshape(state, [1, agent.state_size])
         agent.total_rewards = 0
         agent.epsilon = 1*random.choice([0, 1])*agent.epsilon_decay
         if stopCondition:
             """Loss < TrainingThr, so try to learn unseen samples."""
             initStep = int(TIME*0.8*0.7) + 1
             state = train[initStep]
+            state = np.reshape(state, [1, agent.state_size])
         for time in range(TIME):
-            print(f'*** TIME: {time} *** score rewards %: {(agent.total_rewards/(time+1))*100}')
+            score = (agent.total_rewards / (time+1)) * 100
+            agent.data.measures['score'][e] = score
+            print(f'*** TIME: {time} *** score rewards %: {(score)}')
             action = agent.act(state)  #index of maximum the maximum Q-learning value
-            print(f"Given behaviour: {state[0, 4]}, chosen action: {action}")
+            print(f"Given behaviour: {state[0, agent.state_size-1]}, chosen action: {action}")
             reward, dist = agent.step(action, state)
             agent.data.measures['totalRewards'][e].append(agent.total_rewards)
             print(f"Get reward: {reward}, given dist: {dist}")
             done = True if time+initStep == int(train.shape[0]*0.7) else False
             if not done:
-                next_state = np.reshape(train[initStep + time], [1, 5])
+                next_state = np.reshape(train[initStep + time], [1, agent.state_size])
                 agent.memorize(state, action, reward, next_state, done)
                 state = next_state
             else:
-                score = (agent.total_rewards/time)*100
-                agent.data.measures['score'][e] = score
                 agent.update_target_model()
                 print("=== Sharing weights between models. ===")
                 print("episode: {}/{}, score: {}, epsilon: {:.2}"
@@ -330,5 +334,10 @@ if __name__ == "__main__":
                 stopCondition = True
                 break
 
+            if e == 5:
+                """try to learn new samples"""
+                stopCondition = True
 
+    print("=== Hyperparameters ===")
+    print(f"LR: {agent.learning_rate}; Gamma: {agent.gamma}, Eps: {agent.epsilon}, clip: {agent.clipDelta}")
     print(f"Final Scores (totRewards/steps) for episodes: {agent.data.measures['score']}")
