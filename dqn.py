@@ -2,20 +2,29 @@
 
 import random
 import numpy as np
+from functools import partial
 from collections import deque
 import matplotlib.pyplot as plt
 
+np.random.seed(36)
+random.seed(36)
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import Adam
 from keras import backend as K
+from keras.utils.vis_utils import plot_model
+
+
 
 
 import tensorflow as tf
 
-EPISODES = 6
-TIME = 1500
+print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
+
+EPISODES = 10
+TIME = 1000
+TRAINING_THR = 0.02
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 50, 0]).reshape(1, 5)
@@ -30,7 +39,9 @@ class Measurement():
         self._actionSize = action_size
         self._trainSize = train_size
         self._testSize = test_size
-        self.measures = {'loss': [], 'accuracy': [], 'totalRewards': []}
+        self.measures = {'loss': {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: []}, 'accuracy': [],
+                         'totalRewards': {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: []},
+                         'score': {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: []}}
 
     def train_test_split(self, dataset):
 
@@ -61,12 +72,18 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
-        self.gamma = 0.8  # discount rate
+        self.gamma = 1  # discount rate
         self.epsilon = 1  # exploration rate
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.89
+        self.epsilon_min = 0.001
+        self.epsilon_decay = 0.92
         self.learning_rate = 0.0001
+        self.regDense = partial(tf.keras.layers.Dense,
+                                activation="relu",
+                                kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                bias_regularizer=tf.keras.regularizers.l2(1e-4),
+                                activity_regularizer=tf.keras.regularizers.l2(1e-5))
         self.model = self._build_model()
+        plot_model(self.model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
@@ -93,13 +110,16 @@ class DQNAgent:
         The Q-learning function is a non linear function of type: Q:S x A -> R."""
 
         model = Sequential()
-        model.add(Dense(14, input_dim=self.state_size, activation='relu'))
-        #model.add(BatchNormalization())
-        #model.add(Dropout(rate=0.3))
-        model.add(Dense(24, activation='relu'))
-        #model.add(Dropout(rate=0.3))
-        model.add(Dense(14, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
+        model.add(Dense(14, input_dim=self.state_size,
+                        activation='relu',
+                        kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=tf.keras.regularizers.l2(1e-4),
+                        activity_regularizer=tf.keras.regularizers.l2(1e-5)
+                        ))
+        model.add(self.regDense(24))
+        model.add(self.regDense(14))
+        model.add(self.regDense(self.action_size, activation='linear'))
+        #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))
         print(model.summary())
@@ -117,21 +137,21 @@ class DQNAgent:
         """epsilon-greedy method"""
         if self.epsilon > np.random.rand(1)[0]:
             print("random choice")
-            return random.randrange(self.action_size)
+            return np.random.randint(self.action_size)
         print("predicted choice")
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])  # returns index action
 
-    def replay(self, batch_size):
+    def replay(self, batch_size, episod=0):
         """"replay buffer technique: when a minibatch is available in the buffer the model is trained """
 
         minibatch = random.sample(self.memory, batch_size)
-        print("Replay buffer memory: ")
+        print("Replay buffer: ")
         loss = []
         for state, action, reward, next_state, done in minibatch:
             target = self.model.predict(state)
             #print(f"first state's behavior: {state[:, 4]}")
-            #print(f"predicted target: {target}, action: {action}, reward: {reward}")
+            #print(f"predicted target: {target}")
             #print(f"sum_target: {np.sum(target)}")
             if done:
                 target[0][action] = reward
@@ -140,19 +160,19 @@ class DQNAgent:
                 future_target = self.target_model.predict(next_state)[0]  # predict future Q-learning value
                 #print(f"max futureTarget: {np.amax(future_target)}")
                 target[0][action] = reward + self.gamma * np.amax(future_target)
-                #print(f"target[action]: {target[0][action]}")
-                #print(f"state: {state}, target: {target}")
+                #print(f"updated target: {target}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
             #print(len(history.history['loss']))
             loss.append(history.history['loss'])
-        self.data.measures['loss'].append(np.mean(loss))
-        print(f"Loss: {self.data.measures['loss'][-1]}")
-        nMiniBatches = len(self.data.measures['loss'])
-        if nMiniBatches > batch_size*8 and ((nMiniBatches % batch_size) == 0):
-            print(f"Print Loss miniBatch {nMiniBatches}")
-            self.plotLoss(episod=nMiniBatches)
+        self.data.measures['loss'][episod].append(np.mean(loss))
+        print(f"Loss: {self.data.measures['loss'][episod][-1]}")
+        nMiniBatches = len(self.data.measures['loss'][episod])
+        if nMiniBatches == TIME*0.8*0.7 - 2:
+            print(f"Print Metrics miniBatch {nMiniBatches}")
+            self.plotMetrics(episod=episod, nBathc=nMiniBatches)
 
-        if self.epsilon >= self.epsilon_min:
+
+        if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
         self.epsilon = max(self.epsilon, self.epsilon_min)
@@ -224,6 +244,25 @@ class DQNAgent:
         plt.savefig(f'TotRewards_{episod+1}.png')
         plt.close()
 
+    def plotMetrics(self, episod=0, nBathc=0):
+
+        plt.close('all')
+        batch_loss = len(self.data.measures["loss"][episod])
+        epochs_rewards = range(len(self.data.measures['totalRewards'][episod]))
+        epochs_loss = range(batch_loss)
+        plt.plot(epochs_loss, self.data.measures['loss'][episod], label='loss')
+        plt.plot(epochs_rewards, self.data.measures['totalRewards'][episod], label='TotRewards')
+        plt.legend()
+        plt.xlabel('training epochs')
+        plt.title(f' Episode:{episod}; nBatch:{nBathc}; Lrate: {self.learning_rate}; '
+                  f'score %: {self.data.measures["score"][episod]}')
+        plt.grid()
+        plt.savefig(f"metrics_{episod+1}_{nBathc}.png")
+        plt.close()
+
+
+
+
 
 def fakeDataset(Nsamples=1000):
     """Simulate a dataset containing states about nodes:
@@ -252,34 +291,44 @@ if __name__ == "__main__":
     print(f"train shape: {train.shape}")
     done = False
     batch_size = 32
-
+    stopCondition = False
+    initStep = 1
     for e in range(EPISODES):
         state = train[0]
         state = np.reshape(state, [1, 5])
         agent.total_rewards = 0
-        agent.epsilon = 1
+        agent.epsilon = 1*random.choice([0, 1])*agent.epsilon_decay
+        if stopCondition:
+            """Loss < TrainingThr, so try to learn unseen samples."""
+            initStep = int(TIME*0.8*0.7) + 1
+            state = train[initStep]
         for time in range(TIME):
-            print(f'*** TIME: {time} *** total rewards: {agent.total_rewards}')
+            print(f'*** TIME: {time} *** score rewards %: {(agent.total_rewards/(time+1))*100}')
             action = agent.act(state)  #index of maximum the maximum Q-learning value
             print(f"Given behaviour: {state[0, 4]}, chosen action: {action}")
             reward, dist = agent.step(action, state)
+            agent.data.measures['totalRewards'][e].append(agent.total_rewards)
             print(f"Get reward: {reward}, given dist: {dist}")
-            done = True if time+1 == int(train.shape[0]) else False
+            done = True if time+initStep == int(train.shape[0]*0.7) else False
             if not done:
-                next_state = np.reshape(train[time+1], [1, 5])
+                next_state = np.reshape(train[initStep + time], [1, 5])
                 agent.memorize(state, action, reward, next_state, done)
                 state = next_state
             else:
+                score = (agent.total_rewards/time)*100
+                agent.data.measures['score'][e] = score
                 agent.update_target_model()
+                print("=== Sharing weights between models. ===")
                 print("episode: {}/{}, score: {}, epsilon: {:.2}"
-                      .format(e, EPISODES, (agent.total_rewards/time)*100, agent.epsilon))
+                      .format(e, EPISODES, score, agent.epsilon))
                 break
             if len(agent.memory) > batch_size:
-                agent.replay(batch_size)
-            agent.data.measures['totalRewards'].append(agent.total_rewards)
+                agent.replay(batch_size=batch_size, episod=e)
 
-            if len(agent.data.measures['loss']) > 0 and agent.data.measures['loss'][-1] <= 10:
-                print(f"Minimum Loss: {agent.data.measures['loss']}")
+            if len(agent.data.measures['loss'][e]) > 0 and agent.data.measures['loss'][e][-1] <= TRAINING_THR:
+                print(f"Minimum Loss: {agent.data.measures['loss'][e]}")
+                stopCondition = True
                 break
 
-        agent.plotRewards(episod=e)
+
+    print(f"Final Scores (totRewards/steps) for episodes: {agent.data.measures['score']}")
