@@ -168,9 +168,9 @@ class DQNAgent:
         self.data.measures['loss'][episod].append(np.mean(loss))
         print(f"Loss: {self.data.measures['loss'][episod][-1]}")
         nMiniBatches = len(self.data.measures['loss'][episod])
-        if nMiniBatches >= TIME*0.8*0.8 - 2 and nMiniBatches % batch_size == 0:
+        if nMiniBatches >= batch_size*20 and nMiniBatches % batch_size == 0:
             print(f"Print Metrics miniBatch {nMiniBatches}")
-            self.plotMetrics(episod=episod+1, nBathc=nMiniBatches)
+            self.plotMetrics(episod=episod, nBathc=nMiniBatches)
             self.plotLoss(episod=episod)
             self.plotRewards(episod=episod)
 
@@ -237,7 +237,7 @@ class DQNAgent:
         plt.grid()
         plt.title('Loss')
         plt.xlabel('training epochs')
-        plt.savefig(f'Loss_{batch}.png')
+        plt.savefig(f'../plots/Loss_{episod+1}_{batch}.png')
         plt.close()
 
     def plotRewards(self, episod=0):
@@ -248,15 +248,14 @@ class DQNAgent:
         plt.title(f'Episod: {episod+1}')
         plt.ylabel('Total Rewards')
         plt.xlabel('training epochs')
-        plt.savefig(f'TotRewards_{episod+1}.png')
+        plt.savefig(f'../plots/TotRewards_{episod+1}.png')
         plt.close()
 
     def plotMetrics(self, episod=0, nBathc=0):
 
         plt.close('all')
-        batch_loss = len(self.data.measures["loss"][episod])
         epochs_rewards = range(len(self.data.measures['totalRewards'][episod]))
-        epochs_loss = range(batch_loss)
+        epochs_loss = range(len(self.data.measures["loss"][episod]))
         plt.plot(epochs_loss, self.data.measures['loss'][episod], label='loss')
         plt.plot(epochs_rewards, self.data.measures['totalRewards'][episod], label='TotRewards')
         plt.legend()
@@ -264,5 +263,6 @@ class DQNAgent:
         plt.title(f' Episode:{episod}; nBatch:{nBathc}; Lrate: {self.learning_rate}; '
                   f'score %: {self.data.measures["score"][episod]}')
         plt.grid()
-        plt.savefig(f"metrics_{episod}_{nBathc}.png")
+        plt.savefig(f"../plots/metrics_{episod}_{nBathc}.png")
         plt.close()
+
