@@ -115,7 +115,7 @@ class DQNAgent:
         model.add(self.regDense(24))
         model.add(BatchNormalization())
         model.add(self.regDense(16))
-        model.add(BatchNormalization())
+        #model.add(BatchNormalization())
         model.add(self.regDense(self.action_size, activation='linear'))
         #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=tf.keras.losses.Huber(
@@ -151,17 +151,19 @@ class DQNAgent:
         loss = []
         for state, action, reward, next_state, done in minibatch:
             target = self.model.predict(state)
-            #print(f"first state's behavior: {state[:, 4]}")
-            #print(f"predicted target: {target}")
+            print(f"first state's behavior: {state[:, 4]}")
+            print(f"state: {state} next: {next_state}")
+            print(f"predicted target: {target}")
+            print(f"action: {action}, reward: {reward}")
             #print(f"sum_target: {np.sum(target)}")
             if done:
                 target[0][action] = reward
             else:
                 # a = self.model.predict(next_state)[0]
                 future_target = self.target_model.predict(next_state)[0]  # predict future Q-learning value
-                #print(f"max futureTarget: {np.amax(future_target)}")
+                print(f"max futureTarget: {np.amax(future_target)}")
                 target[0][action] = reward + self.gamma * np.amax(future_target)
-                #print(f"updated target: {target}")
+                print(f"updated target: {target}, {target[0][action]}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
             #print(len(history.history['loss']))
             loss.append(history.history['loss'])
@@ -196,7 +198,7 @@ class DQNAgent:
 
         if state[0, 4] == 0:  # bad node
             dist = np.linalg.norm(WORSTE_SC - state)
-            if dist > 2.0:  # not too bad
+            if dist > 2.4:  # not too bad
                 if action == 3:
                     self.total_rewards += 1
                     return 1, dist
@@ -213,14 +215,19 @@ class DQNAgent:
 
         if state[0, 4] == 1:  # good node
             dist = np.linalg.norm(BEST_SC - state)
-            if dist > 2.0:  # not too good
-                if 1 <= action < 3:
+            if 2 < dist <= 2.5:  # not too good
+                if action == 1:
                     self.total_rewards += 1
                     return 1, dist
                 else:
-                    #self.total_rewards -= 1
                     return -1, dist
-            else:  # very good
+            if dist > 2.5:
+                if action == 2:
+                    self.total_rewards += 1
+                    return 1, dist
+                else:
+                    return -1, dist
+            if dist <= 2.0:  # very good
                 if action == 0:
                     self.total_rewards += 1
                     return 1, dist
