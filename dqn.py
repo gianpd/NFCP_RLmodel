@@ -19,8 +19,8 @@ import tensorflow as tf
 print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 
 EPISODES = 10
-TIME = 800
-TRAINING_THR = 0.4
+TIME = 1800
+TRAINING_THR = 0.2
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
@@ -73,7 +73,7 @@ class DQNAgent:
         self.epsilon_min = 0.001
         self.epsilon_decay = 0.92
         self.learning_rate = 0.0001
-        self.clipDelta = 0
+        self.clipDelta = 1.0
         self.regDense = partial(tf.keras.layers.Dense,
                                 activation="relu",
                                 kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-4, l2=1e-4),
@@ -109,14 +109,14 @@ class DQNAgent:
                         activation='relu',
                         kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
                         bias_regularizer=tf.keras.regularizers.l2(1e-4),
-                        activity_regularizer=tf.keras.regularizers.l2(1e-5)
+                        activity_regularizer=tf.keras.regularizers.l2(1e-4)
                         ))
         model.add(self.regDense(24))
         model.add(self.regDense(16))
         model.add(self.regDense(self.action_size, activation='linear'))
         #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=tf.keras.losses.Huber(
-        delta=1.0, name='huber_loss'),
+        delta=self.clipDelta, name='huber_loss'),
         optimizer=Adam(lr=self.learning_rate))
         print(model.summary())
         return model
@@ -165,7 +165,7 @@ class DQNAgent:
         self.data.measures['loss'][episod].append(np.mean(loss))
         print(f"Loss: {self.data.measures['loss'][episod][-1]}")
         nMiniBatches = len(self.data.measures['loss'][episod])
-        if nMiniBatches == TIME*0.8*0.7 - 2:
+        if nMiniBatches == TIME*0.8*0.8 - 2:
             print(f"Print Metrics miniBatch {nMiniBatches}")
             self.plotMetrics(episod=episod+1, nBathc=nMiniBatches)
 
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         agent.epsilon = 1*random.choice([0, 1])*agent.epsilon_decay
         if stopCondition:
             """Loss < TrainingThr, so try to learn unseen samples."""
-            initStep = int(TIME*0.8*0.7) + 1
+            initStep = int(TIME*0.8*0.8) + 1
             state = train[initStep]
             state = np.reshape(state, [1, agent.state_size])
         for time in range(TIME):
@@ -315,7 +315,7 @@ if __name__ == "__main__":
             reward, dist = agent.step(action, state)
             agent.data.measures['totalRewards'][e].append(agent.total_rewards)
             print(f"Get reward: {reward}, given dist: {dist}")
-            done = True if time+initStep == int(train.shape[0]*0.7) else False
+            done = True if time+initStep == int(train.shape[0]*0.8) else False
             if not done:
                 next_state = np.reshape(train[initStep + time], [1, agent.state_size])
                 agent.memorize(state, action, reward, next_state, done)
