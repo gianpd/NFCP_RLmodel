@@ -58,6 +58,13 @@ for e in range(EPISODES):
         if len(agent.memory) > batch_size:
             agent.replay(batch_size=batch_size, episod=e)
 
+        nMiniBatches = len(agent.data.measures['loss'][e])
+        if nMiniBatches >= batch_size * 20 and nMiniBatches % batch_size == 0:
+            print(f"Print Metrics miniBatch {nMiniBatches}")
+            agent.plotMetrics(episod=e, nBathc=nMiniBatches)
+            agent.plotLoss(episod=e)
+            agent.plotRewards(episod=e)
+
         if len(agent.data.measures['loss'][e]) > 0 and agent.data.measures['loss'][e][-1] <= TRAINING_THR:
             print(f"Minimum Loss: {agent.data.measures['loss'][e]}")
             stopCondition = True
