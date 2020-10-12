@@ -201,7 +201,7 @@ class DQNAgent:
 
         if state[0, 4] == 0:  # bad node
             dist = np.linalg.norm(WORSTE_SC - state)
-            if dist > 5:  # not too bad
+            if dist > 2.0:  # not too bad
                 if action == 3:
                     self.total_rewards += 1
                     return 1, dist
@@ -218,7 +218,7 @@ class DQNAgent:
 
         if state[0, 4] == 1:  # good node
             dist = np.linalg.norm(BEST_SC - state)
-            if dist > 5:  # not too good
+            if dist > 2.0:  # not too good
                 if 1 <= action < 3:
                     self.total_rewards += 1
                     return 1, dist
@@ -352,9 +352,9 @@ if __name__ == "__main__":
                 stopCondition = True
                 break
 
-            if e == 5:
-                """try to learn new samples"""
-                stopCondition = True
+            #if e == 5:
+            #    """try to learn new samples"""
+            #    stopCondition = True
 
     print("=== Hyperparameters ===")
     print(f"LR: {agent.learning_rate}; Gamma: {agent.gamma}, Eps: {agent.epsilon}, clip: {agent.clipDelta}")
