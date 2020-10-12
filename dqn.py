@@ -16,14 +16,20 @@ from keras import backend as K
 
 import tensorflow as tf
 
+from sklearn.preprocessing import StandardScaler
+
 print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 
 EPISODES = 10
 TIME = 1800
-TRAINING_THR = 0.2
+TRAINING_THR = 0.001
 
 BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
 WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
+
+BEST_SC = StandardScaler().fit_transform(BEST)
+WORSTE_SC = StandardScaler().fit_transform(WORSTE)
+
 
 plt.close('all')
 
@@ -80,6 +86,7 @@ class DQNAgent:
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
                                 activity_regularizer=tf.keras.regularizers.l2(1e-4))
         self.model = self._build_model()
+        #tf.keras.utils.plot_model(self.model, 'model.png', show_shapes=True)
         self.target_model = self._build_model()
         self.update_target_model()
         self.total_rewards = 0
@@ -111,8 +118,11 @@ class DQNAgent:
                         bias_regularizer=tf.keras.regularizers.l2(1e-4),
                         activity_regularizer=tf.keras.regularizers.l2(1e-4)
                         ))
+        model.add(BatchNormalization())
         model.add(self.regDense(24))
+        model.add(BatchNormalization())
         model.add(self.regDense(16))
+        model.add(BatchNormalization())
         model.add(self.regDense(self.action_size, activation='linear'))
         #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=tf.keras.losses.Huber(
@@ -190,7 +200,7 @@ class DQNAgent:
 
 
         if state[0, 4] == 0:  # bad node
-            dist = np.linalg.norm(WORSTE - state)
+            dist = np.linalg.norm(WORSTE_SC - state)
             if dist > 5:  # not too bad
                 if action == 3:
                     self.total_rewards += 1
@@ -207,7 +217,7 @@ class DQNAgent:
                     return -1, dist
 
         if state[0, 4] == 1:  # good node
-            dist = np.linalg.norm(BEST - state)
+            dist = np.linalg.norm(BEST_SC - state)
             if dist > 5:  # not too good
                 if 1 <= action < 3:
                     self.total_rewards += 1
@@ -280,6 +290,11 @@ def fakeDataset(Nsamples=1000):
 
     return dataset
 
+def standardScalar(X):
+    scalar = StandardScaler()
+    X_scaled = scalar.fit_transform(X)
+    return X_scaled, scalar
+
 if __name__ == "__main__":
 
     actions = [0, 1, 2, 3, 4]
@@ -290,6 +305,9 @@ if __name__ == "__main__":
     agent = DQNAgent(state_size, action_size)
     train, test = agent.data.train_test_split(dataset)
 
+    y_train = train[:, 4]
+    train_sc, scalar = standardScalar(train)
+    train_sc[:, 4] = y_train
     print(f"train shape: {train.shape}")
     done = False
     batch_size = 32
@@ -297,14 +315,14 @@ if __name__ == "__main__":
     initStep = 1
 
     for e in range(EPISODES):
-        state = train[0]
+        state = train_sc[0]
         state = np.reshape(state, [1, agent.state_size])
         agent.total_rewards = 0
         agent.epsilon = 1*random.choice([0, 1])*agent.epsilon_decay
         if stopCondition:
             """Loss < TrainingThr, so try to learn unseen samples."""
             initStep = int(TIME*0.8*0.8) + 1
-            state = train[initStep]
+            state = train_sc[initStep]
             state = np.reshape(state, [1, agent.state_size])
         for time in range(TIME):
             score = (agent.total_rewards / (time+1)) * 100
@@ -317,7 +335,7 @@ if __name__ == "__main__":
             print(f"Get reward: {reward}, given dist: {dist}")
             done = True if time+initStep == int(train.shape[0]*0.8) else False
             if not done:
-                next_state = np.reshape(train[initStep + time], [1, agent.state_size])
+                next_state = np.reshape(train_sc[initStep + time], [1, agent.state_size])
                 agent.memorize(state, action, reward, next_state, done)
                 state = next_state
             else:
