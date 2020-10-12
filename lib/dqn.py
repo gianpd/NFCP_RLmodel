@@ -20,7 +20,7 @@ from lib.utils import *
 print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 
 EPISODES = 10
-TIME = 1500
+TIME = 1000
 TRAINING_THR = 0.01
 BEST_SC = StandardScaler().fit_transform(BEST)
 WORSTE_SC = StandardScaler().fit_transform(WORSTE)
@@ -105,16 +105,19 @@ class DQNAgent:
         The Q-learning function is a non linear function of type: Q:S x A -> R."""
 
         model = Sequential()
-        model.add(Dense(14, input_dim=self.state_size,
-                        activation='relu',
-                        kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=tf.keras.regularizers.l2(1e-4),
-                        activity_regularizer=tf.keras.regularizers.l2(1e-4)
-                        ))
+        #model.add(Dense(14, input_dim=self.state_size,
+        #                activation='relu',
+        #               kernel_regularizer=tf.keras.regularizers.l1_l2(l1=1e-5, l2=1e-4),
+        #                bias_regularizer=tf.keras.regularizers.l2(1e-4),
+        #                activity_regularizer=tf.keras.regularizers.l2(1e-4)
+        #                ))
+        model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         model.add(BatchNormalization())
-        model.add(self.regDense(24))
+        #model.add(self.regDense(24))
+        model.add(Dense(24, activation='relu'))
         model.add(BatchNormalization())
-        model.add(self.regDense(16))
+        #model.add(self.regDense(16))
+        model.add(Dense(16, activation='relu'))
         #model.add(BatchNormalization())
         model.add(self.regDense(self.action_size, activation='linear'))
         #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
@@ -215,13 +218,13 @@ class DQNAgent:
 
         if state[0, 4] == 1:  # good node
             dist = np.linalg.norm(BEST_SC - state)
-            if 2 < dist <= 2.5:  # not too good
+            if 2 < dist < 2.4:  # not too good
                 if action == 1:
                     self.total_rewards += 1
                     return 1, dist
                 else:
                     return -1, dist
-            if dist > 2.5:
+            if dist >= 2.4:
                 if action == 2:
                     self.total_rewards += 1
                     return 1, dist
