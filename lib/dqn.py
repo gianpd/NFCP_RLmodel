@@ -1,5 +1,4 @@
 #!/usr/bin/python
-
 import random
 import numpy as np
 from functools import partial
@@ -23,14 +22,8 @@ print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 EPISODES = 10
 TIME = 1500
 TRAINING_THR = 0.01
-
-#BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
-#WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
-
 BEST_SC = StandardScaler().fit_transform(BEST)
 WORSTE_SC = StandardScaler().fit_transform(WORSTE)
-
-
 plt.close('all')
 
 class Measurement():
