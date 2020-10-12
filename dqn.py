@@ -175,7 +175,7 @@ class DQNAgent:
         self.data.measures['loss'][episod].append(np.mean(loss))
         print(f"Loss: {self.data.measures['loss'][episod][-1]}")
         nMiniBatches = len(self.data.measures['loss'][episod])
-        if nMiniBatches >= TIME*0.8*0.8 - 2:
+        if nMiniBatches >= TIME*0.8*0.8 - 2 and nMiniBatches % batch_size == 0:
             print(f"Print Metrics miniBatch {nMiniBatches}")
             self.plotMetrics(episod=episod+1, nBathc=nMiniBatches)
 
