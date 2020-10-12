@@ -16,16 +16,16 @@ from keras import backend as K
 
 import tensorflow as tf
 
-from sklearn.preprocessing import StandardScaler
+from lib.utils import *
 
 print(f"Number of GPUs: {len(tf.config.list_physical_devices('GPU'))}")
 
 EPISODES = 10
-TIME = 1800
-TRAINING_THR = 0.001
+TIME = 1500
+TRAINING_THR = 0.01
 
-BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
-WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
+#BEST = np.array([1000, 10000, 500, 12, 1]).reshape(1, 5)
+#WORSTE = np.array([0, 0, 1, 5, 0]).reshape(1, 5)
 
 BEST_SC = StandardScaler().fit_transform(BEST)
 WORSTE_SC = StandardScaler().fit_transform(WORSTE)
@@ -178,6 +178,8 @@ class DQNAgent:
         if nMiniBatches >= TIME*0.8*0.8 - 2 and nMiniBatches % batch_size == 0:
             print(f"Print Metrics miniBatch {nMiniBatches}")
             self.plotMetrics(episod=episod+1, nBathc=nMiniBatches)
+            self.plotLoss(episod=episod)
+            self.plotRewards(episod=episod)
 
 
         if self.epsilon > self.epsilon_min:
@@ -235,10 +237,10 @@ class DQNAgent:
 
     def plotLoss(self, episod=0):
         plt.close('all')
-        batch = len(self.data.measures["loss"])
+        batch = len(self.data.measures["loss"][episod])
         plt.close('all')
         epochs_loss = range(batch)
-        plt.plot(epochs_loss, self.data.measures['loss'])
+        plt.plot(epochs_loss, self.data.measures['loss'][episod])
         plt.grid()
         plt.title('Loss')
         plt.xlabel('training epochs')
@@ -247,8 +249,8 @@ class DQNAgent:
 
     def plotRewards(self, episod=0):
         plt.close('all')
-        epochs_rewards = range(len(self.data.measures['totalRewards']))
-        plt.plot(epochs_rewards, self.data.measures['totalRewards'])
+        epochs_rewards = range(len(self.data.measures['totalRewards'][episod]))
+        plt.plot(epochs_rewards, self.data.measures['totalRewards'][episod])
         plt.grid()
         plt.title(f'Episod: {episod+1}')
         plt.ylabel('Total Rewards')
@@ -271,91 +273,3 @@ class DQNAgent:
         plt.grid()
         plt.savefig(f"metrics_{episod}_{nBathc}.png")
         plt.close()
-
-
-
-
-
-def fakeDataset(Nsamples=1000):
-    """Simulate a dataset containing states about nodes:
-    Features = [UpTime, BalanceInTime, OutLinkMatrix, Ping, Behaviour]"""
-
-    dataset = np.zeros((Nsamples, 5))
-    for i in range(Nsamples):
-        b = BEST - np.random.randn(5)*np.random.randint(1, 5)
-        b[0, 4] = 1
-        w = WORSTE + np.random.randn(5)*np.random.randint(1, 5)
-        w[0, 4] = 0
-        dataset[i, :] = b if np.random.choice([0,1]) == 0 else w
-
-    return dataset
-
-def standardScalar(X):
-    scalar = StandardScaler()
-    X_scaled = scalar.fit_transform(X)
-    return X_scaled, scalar
-
-if __name__ == "__main__":
-
-    actions = [0, 1, 2, 3, 4]
-    dataset = fakeDataset(Nsamples=TIME)
-    state_size = dataset.shape[1]
-    action_size = len(actions)
-
-    agent = DQNAgent(state_size, action_size)
-    train, test = agent.data.train_test_split(dataset)
-
-    y_train = train[:, 4]
-    train_sc, scalar = standardScalar(train)
-    train_sc[:, 4] = y_train
-    print(f"train shape: {train.shape}")
-    done = False
-    batch_size = 32
-    stopCondition = False
-    initStep = 1
-
-    for e in range(EPISODES):
-        state = train_sc[0]
-        state = np.reshape(state, [1, agent.state_size])
-        agent.total_rewards = 0
-        agent.epsilon = 1*random.choice([0, 1])*agent.epsilon_decay
-        if stopCondition:
-            """Loss < TrainingThr, so try to learn unseen samples."""
-            initStep = int(TIME*0.8*0.8) + 1
-            state = train_sc[initStep]
-            state = np.reshape(state, [1, agent.state_size])
-        for time in range(TIME):
-            score = (agent.total_rewards / (time+1)) * 100
-            agent.data.measures['score'][e] = score
-            print(f'*** TIME: {time} *** score rewards %: {(score)}')
-            action = agent.act(state)  #index of maximum the maximum Q-learning value
-            print(f"Given behaviour: {state[0, agent.state_size-1]}, chosen action: {action}")
-            reward, dist = agent.step(action, state)
-            agent.data.measures['totalRewards'][e].append(agent.total_rewards)
-            print(f"Get reward: {reward}, given dist: {dist}")
-            done = True if time+initStep == int(train.shape[0]*0.8) else False
-            if not done:
-                next_state = np.reshape(train_sc[initStep + time], [1, agent.state_size])
-                agent.memorize(state, action, reward, next_state, done)
-                state = next_state
-            else:
-                agent.update_target_model()
-                print("=== Sharing weights between models. ===")
-                print("episode: {}/{}, score: {}, epsilon: {:.2}"
-                      .format(e, EPISODES, score, agent.epsilon))
-                break
-            if len(agent.memory) > batch_size:
-                agent.replay(batch_size=batch_size, episod=e)
-
-            if len(agent.data.measures['loss'][e]) > 0 and agent.data.measures['loss'][e][-1] <= TRAINING_THR:
-                print(f"Minimum Loss: {agent.data.measures['loss'][e]}")
-                stopCondition = True
-                break
-
-            #if e == 5:
-            #    """try to learn new samples"""
-            #    stopCondition = True
-
-    print("=== Hyperparameters ===")
-    print(f"LR: {agent.learning_rate}; Gamma: {agent.gamma}, Eps: {agent.epsilon}, clip: {agent.clipDelta}")
-    print(f"Final Scores (totRewards/steps) for episodes: {agent.data.measures['score']}")
