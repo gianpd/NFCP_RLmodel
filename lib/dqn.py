@@ -80,7 +80,7 @@ class DQNAgent:
                                 kernel_regularizer=tf.keras.regularizers.l2(1e-4),
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
                                 activity_regularizer=tf.keras.regularizers.l2(1e-4))
-        self.seluL2Dense = partial(tf.keras.layer.Dense, activation='selu',
+        self.seluL2Dense = partial(tf.keras.layers.Dense, activation='selu',
                                 kernel_initializer="lecun_normal",
                                 kernel_regularization=tf.keras.regularizers.l2(1e-4),
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
