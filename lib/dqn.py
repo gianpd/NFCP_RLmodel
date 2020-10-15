@@ -13,7 +13,9 @@ from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import Adam
 from keras import backend as K
 
+
 import tensorflow as tf
+#leaky_relu = tf.keras.layer.LeakyReLU(alpha=0.2)
 
 from lib.utils import *
 
@@ -78,6 +80,11 @@ class DQNAgent:
                                 kernel_regularizer=tf.keras.regularizers.l2(1e-4),
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
                                 activity_regularizer=tf.keras.regularizers.l2(1e-4))
+        self.seluL2Dense = partial(tf.keras.layer.Dense, activation='selu',
+                                kernel_initializer="lecun_normal",
+                                kernel_regularization=tf.keras.regularizers.l2(1e-4),
+                                bias_regularizer=tf.keras.regularizers.l2(1e-4),
+                                activity_regularizer=tf.keras.regularizers.l2(1e-4))
         self.model = self._build_model()
         #tf.keras.utils.plot_model(self.model, 'model.png', show_shapes=True)
         self.target_model = self._build_model()
@@ -105,23 +112,32 @@ class DQNAgent:
         The Q-learning function is a non linear function of type: Q:S x A -> R."""
 
         model = Sequential()
+        #model.add(Dense(14, input_dim=self.state_size,
+        #               activation='relu',
+        #               kernel_regularizer=tf.keras.regularizers.l2(1e-4),
+        #                bias_regularizer=tf.keras.regularizers.l2(1e-4),
+        #                activity_regularizer=tf.keras.regularizers.l2(1e-4)
+        #                ))
         model.add(Dense(14, input_dim=self.state_size,
-                        activation='relu',
-                       kernel_regularizer=tf.keras.regularizers.l2(1e-4),
+                        activation='selu',
+                        kernel_initializer="lecun_normal",
+                        kernel_regularizer=tf.keras.regularizers.l2(1e-4),
                         bias_regularizer=tf.keras.regularizers.l2(1e-4),
                         activity_regularizer=tf.keras.regularizers.l2(1e-4)
                         ))
         #model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         #model.add(BatchNormalization())
         model.add(Dropout(0.3))
-        model.add(self.regDense(24))
+        model.add(self.seluDense(24))
+        #model.add(self.regDense(24))
         #model.add(Dense(24, activation='relu'))
         #model.add(BatchNormalization())
         model.add(Dropout(0.3))
-        model.add(self.regDense(16))
+        model.add(self.seluDense(16))
+        #model.add(self.regDense(16))
         #model.add(Dense(16, activation='relu'))
         #model.add(BatchNormalization())
-        model.add(self.regDense(self.action_size, activation='linear'))
+        model.add(self.seluL2Dense(self.action_size, activation='linear'))
         model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=tf.keras.losses.Huber(
         delta=self.clipDelta, name='huber_loss'),
