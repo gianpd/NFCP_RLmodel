@@ -1,6 +1,7 @@
 from lib.dqn import DQNAgent
 from lib.utils import *
 import random
+import pandas as pd
 
 # === GLOBAL CONSTANT
 EPISODES = 10
@@ -24,6 +25,9 @@ done = False
 batch_size = 32
 stopCondition = False
 initStep = 1
+isMinimumLoss = False
+
+pd.DataFrame(data=test).to_csv('test/test_SeLUL2.csv')
 
 for e in range(EPISODES):
     state = train_sc[0]
@@ -68,11 +72,17 @@ for e in range(EPISODES):
         if len(agent.data.measures['loss'][e]) > 0 and agent.data.measures['loss'][e][-1] <= TRAINING_THR:
             print(f"Minimum Loss: {agent.data.measures['loss'][e]}")
             stopCondition = True
+            isMinimumLoss = True
             break
 
         # if e == 5:
         #    """try to learn new samples"""
         #    stopCondition = True
+
+# Save the model
+if agent.data.measures['score'][-1] > 87.00:
+    agent.save(name='weights/SeLUL2weights.hdf5')
+
 
 print("=== Hyperparameters ===")
 print(f"LR: {agent.learning_rate}; Gamma: {agent.gamma}, Eps: {agent.epsilon}, clip: {agent.clipDelta}")
