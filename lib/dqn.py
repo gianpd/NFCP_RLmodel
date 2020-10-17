@@ -82,9 +82,10 @@ class DQNAgent:
                                 activity_regularizer=tf.keras.regularizers.l2(1e-4))
         self.seluL2Dense = partial(tf.keras.layers.Dense, activation='selu',
                                 kernel_initializer="lecun_normal",
-                                kernel_regularization=tf.keras.regularizers.l2(1e-4),
+                                kernel_regularizer=tf.keras.regularizers.l2(1e-4),
                                 bias_regularizer=tf.keras.regularizers.l2(1e-4),
-                                activity_regularizer=tf.keras.regularizers.l2(1e-4))
+                                activity_regularizer=tf.keras.regularizers.l2(1e-4),
+                                )
         self.model = self._build_model()
         #tf.keras.utils.plot_model(self.model, 'model.png', show_shapes=True)
         self.target_model = self._build_model()
@@ -128,12 +129,12 @@ class DQNAgent:
         #model.add(Dense(14, input_dim=self.state_size, activation='relu'))
         #model.add(BatchNormalization())
         model.add(Dropout(0.3))
-        model.add(self.seluDense(24))
+        model.add(self.seluL2Dense(24))
         #model.add(self.regDense(24))
         #model.add(Dense(24, activation='relu'))
         #model.add(BatchNormalization())
         model.add(Dropout(0.3))
-        model.add(self.seluDense(16))
+        model.add(self.seluL2Dense(16))
         #model.add(self.regDense(16))
         #model.add(Dense(16, activation='relu'))
         #model.add(BatchNormalization())
@@ -172,19 +173,19 @@ class DQNAgent:
         loss = []
         for state, action, reward, next_state, done in minibatch:
             target = self.model.predict(state)
-            print(f"first state's behavior: {state[:, 4]}")
-            print(f"state: {state} next: {next_state}")
-            print(f"predicted target: {target}")
-            print(f"action: {action}, reward: {reward}")
+            #print(f"first state's behavior: {state[:, 4]}")
+            #print(f"state: {state} next: {next_state}")
+            #print(f"predicted target: {target}")
+            #print(f"action: {action}, reward: {reward}")
             #print(f"sum_target: {np.sum(target)}")
             if done:
                 target[0][action] = reward
             else:
                 # a = self.model.predict(next_state)[0]
                 future_target = self.target_model.predict(next_state)[0]  # predict future Q-learning value
-                print(f"max futureTarget: {np.amax(future_target)}")
+                #print(f"max futureTarget: {np.amax(future_target)}")
                 target[0][action] = reward + self.gamma * np.amax(future_target)
-                print(f"updated target: {target}, {target[0][action]}")
+                #print(f"updated target: {target}, {target[0][action]}")
             history = self.model.fit(state, target, epochs=1, verbose=0)
             #print(len(history.history['loss']))
             loss.append(history.history['loss'])
