@@ -24,3 +24,24 @@ def standardScalar(X):
     scalar = StandardScaler()
     X_scaled = scalar.fit_transform(X)
     return X_scaled, scalar
+
+def computeLabels(states, worste, best):
+
+    labels = []
+    for state in states:
+        if state[0, 4] == 0:
+            dist = np.linalg.norm(worste - state)
+            if dist > 2.4:
+                labels.append(3.0)
+            else:
+                labels.append(4.0)
+        if state[0, 4] == 1:  # good node
+            dist = np.linalg.norm(best - state)
+            if 2 < dist < 2.4:  # not too good
+                labels.append(1.0)
+            if dist >= 2.4:
+                labels.append(2.0)
+            if dist <= 2.0:  # very good
+                labels.append(0.0)
+
+    return labels

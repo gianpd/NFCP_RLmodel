@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 np.random.seed(36)
 random.seed(36)
 
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import Adam
 from keras import backend as K
@@ -139,7 +139,7 @@ class DQNAgent:
         #model.add(Dense(16, activation='relu'))
         #model.add(BatchNormalization())
         model.add(self.seluL2Dense(self.action_size, activation='linear'))
-        model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
+        #model.add(Dense(self.action_size, activation='linear'))  # Regression problem.
         model.compile(loss=tf.keras.losses.Huber(
         delta=self.clipDelta, name='huber_loss'),
         optimizer=Adam(lr=self.learning_rate))
@@ -206,16 +206,17 @@ class DQNAgent:
         print(f"Epsilon: {self.epsilon}")
 
     def load(self, name):
-        self.model.load_weights(name)
+        self.model.load_model(name)
 
     def save(self, name):
-        self.model.save_weights(name)
+        self.model.save(name)
 
     def step(self, action, state):
         reward, dist = self.reward(state, action)
         return reward, dist
 
     def reward(self, state, action):
+        """reward function"""
 
 
         if state[0, 4] == 0:  # bad node

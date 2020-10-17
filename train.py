@@ -4,9 +4,10 @@ import random
 import pandas as pd
 
 # === GLOBAL CONSTANT
-EPISODES = 10
-TIME = 1500
+EPISODES = 1
+TIME = 15
 TRAINING_THR = 0.01
+MINIMUM_SCORE = 87.00
 
 # === SETTING ENVIRONMENT
 actions = [0, 1, 2, 3, 4]
@@ -27,7 +28,9 @@ stopCondition = False
 initStep = 1
 isMinimumLoss = False
 
-pd.DataFrame(data=test).to_csv('test/test_SeLUL2.csv')
+
+pd.DataFrame(data=test).to_csv('test/test_SeLuDL2.csv', index=False)
+print('=== TEST loaded. ===')
 
 for e in range(EPISODES):
     state = train_sc[0]
@@ -80,8 +83,9 @@ for e in range(EPISODES):
         #    stopCondition = True
 
 # Save the model
-if agent.data.measures['score'][-1] > 87.00:
-    agent.save(name='weights/SeLUL2weights.hdf5')
+if agent.data.measures['score'][e] > MINIMUM_SCORE:
+    print(f'=== Minimum score {MINIMUM_SCORE} reached. Model saved.')
+    agent.save(name='models/SeLuDL2.h5')
 
 
 print("=== Hyperparameters ===")
